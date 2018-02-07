@@ -7,13 +7,20 @@ This is a collection of my thoughts on Event Sourcing and the implementation dif
 Perhaps the way to do this is to have a ASP.NET api which just exposes the controllers which take requests from the client. The client doesn't actually change the domain but instead emits requests to change the domain and the subscribes to updates. An example would be wanting to add an Order Line to an Order. The Order itself is the Aggregate.  If I moddled the request as an F# record it would look something like this:
 
 ```fsharp
-let aggregate<'a> = {
+type event<'a> = {
+    Id : Guid
+    Timestamp : DateTimeOffset
+    TopicId : string
+    Content : 'a
+}
+
+type aggregate<'a> = {
     AggregateId : Guid
     Version : int
     Body : 'a
 }
 
-let request<'a> = {
+type request<'a> = {
     RequestId : Guid
     UserId : string
     TimeStamp : DateTimeOffset
@@ -22,7 +29,7 @@ let request<'a> = {
 }
 
 
-let addOrderLineBody = {
+type addOrderLineBody = {
     AggregateId : Guid
     ItemCode : string
     Amount : decimal
@@ -37,9 +44,17 @@ The User will be using a Client of some kind whether it be a native app or a web
 
 ### Api Service Receives Request
 
-When the Client sends a Request to the API service authentication and authorization occur. This service could be as simple as an ASP.NET backend with a set of controllers for handling the requests. If the Client passes the security checks then a `RequestEvent` is generated and added to the `RequestEventStream`. The API responds with a token which corresponds to the event that was generated. The Client can poll for responses to the request using this token. A user could make the Client actively update the UI when the Request is received. It could query the Aggregate once it received confirmation that the request had been completed.
+When the Client sends a Request to the API service authentication and authorization occur. This service could be as simple as an ASP.NET MVC backend with a set of controllers for handling the requests. If the Client passes the security checks then a `RequestEvent` is generated and added to the `RequestEventStream`. The API responds with a token which corresponds to the event that was generated. The Client can poll for responses to the request using this token. A user could make the Client actively update the UI when the Request is received. It could query the Aggregate once it received confirmation that the request had been completed.
+
+---
+
+**Note** As I was working with building a model for this it became obvious that the API needs to map the request to the domain model before adding the Request to the Request Event Store. To give youself flexibility, it is good to use Discriminated Unions to model the different options for the various types.
+
+---
 
 ### Service stores the request in the Request Event Stream
+
+When the Request Event is generated it is not immediately processed. It is added to the Request Event Stream which is an append only "table" in a database. The table could been in an relational datastore or a document store. What is critical is that the sequence in which the events arrive is maintained. This becomes the source of truth for the application.
 
 ### Request Processor Picks up Request
 
